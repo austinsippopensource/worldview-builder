@@ -1,5 +1,9 @@
 # WorldviewBuilder
 
+## GitHub
+Public repo: https://austinsippopensource@github.com/austinsippopensource/worldview-builder  
+Account: austinsippopensource (OSS account, not personal)
+
 An on-device React Native app that helps users build, advocate for, and challenge their personal worldview using a locally-running LLM.
 
 ## Concept
@@ -23,7 +27,7 @@ The advocate→challenger flip is the core UX moment: first understand your beli
 
 ## Target Model
 
-**Gemma 4 E4B Q4_K_M GGUF** (~2.5 GB) — the recommended model for final production.
+**Gemma 4 E4B Q4_K_M GGUF** (~5 GB) — the recommended model for final production.
 
 To test locally with llama.cpp before running on device:
 ```

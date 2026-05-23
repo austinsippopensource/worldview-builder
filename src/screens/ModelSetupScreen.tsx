@@ -37,17 +37,19 @@ import { useLlama } from '../llm/LlamaContext';
 const RECOMMENDED_MODELS = [
   {
     name: 'Gemma 4 E4B (recommended)',
-    description: '~2.5 GB · Best balance of quality and speed on modern phones',
-    hint: 'Search "gemma-4-e4b GGUF" on huggingface.co',
+    description: '~5 GB · Best balance of quality and speed on modern phones',
+    url: 'https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf',
   },
   {
     name: 'Qwen3-4B Q4_K_M',
     description: '~2.5 GB · Strong reasoning, great for debate and analysis',
+    url: null,
     hint: 'Search "Qwen3-4B GGUF" on huggingface.co',
   },
   {
     name: 'Phi-4 Mini Q4_K_M',
     description: '~2.1 GB · Compact, fast, good instruction following',
+    url: null,
     hint: 'Search "phi-4-mini GGUF" on huggingface.co',
   },
 ];
@@ -93,9 +95,7 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
     }
   }
 
-  async function handleDownload() {
-    if (!downloadUrl.trim()) return;
-    const url = downloadUrl.trim();
+  async function handleDownloadUrl(url: string) {
     const fileName = url.split('/').pop() ?? 'model.gguf';
     const destPath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
@@ -124,6 +124,11 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
     } finally {
       setDownloading(false);
     }
+  }
+
+  async function handleDownload() {
+    if (!downloadUrl.trim()) return;
+    await handleDownloadUrl(downloadUrl.trim());
   }
 
   /**
@@ -167,7 +172,20 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
         <View key={m.name} style={styles.modelCard}>
           <Text style={styles.modelName}>{m.name}</Text>
           <Text style={styles.modelDesc}>{m.description}</Text>
-          <Text style={styles.modelHint}>{m.hint}</Text>
+          {m.url ? (
+            <TouchableOpacity
+              style={styles.downloadCardBtn}
+              onPress={() => {
+                setDownloadUrl(m.url!);
+                handleDownloadUrl(m.url!);
+              }}
+              disabled={downloading}
+            >
+              <Text style={styles.downloadCardBtnText}>Download & load</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.modelHint}>{m.hint}</Text>
+          )}
         </View>
       ))}
 
@@ -249,6 +267,14 @@ const styles = StyleSheet.create({
   modelName: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', marginBottom: 2 },
   modelDesc: { fontSize: 13, color: '#555', marginBottom: 4 },
   modelHint: { fontSize: 12, color: '#888', fontStyle: 'italic' },
+  downloadCardBtn: {
+    marginTop: 10,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  downloadCardBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   primaryBtn: {
     backgroundColor: '#1a1a2e',
     borderRadius: 12,
