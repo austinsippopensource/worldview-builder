@@ -5,10 +5,3 @@ rootProject.name = 'WorldviewBuilder'
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
 
-dependencyResolutionManagement {
-    repositories {
-        maven {
-            url("$rootDir/../node_modules/@react-native-async-storage/async-storage/android/libs")
-        }
-    }
-}
