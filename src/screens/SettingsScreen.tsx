@@ -140,6 +140,8 @@ export function SettingsScreen() {
         Alert.alert('Download failed', `Status ${result.statusCode}`);
         return;
       }
+      // Transition from "Downloading…" to "Loading model…" immediately
+      setDownloadingUrl(null);
       setDownloadedModels(prev => new Set([...prev, url]));
       setSwitchingUrl(url);
       await loadModel(destPath);
@@ -292,7 +294,7 @@ export function SettingsScreen() {
             ) : isThisSwitching ? (
               <View style={styles.busyRow}>
                 <ActivityIndicator color="#1a1a2e" />
-                <Text style={styles.busyText}>Loading model…</Text>
+                <Text style={styles.busyText}>Loading into memory… (up to 60 sec)</Text>
               </View>
             ) : isActive ? null : isDownloaded ? (
               <TouchableOpacity
