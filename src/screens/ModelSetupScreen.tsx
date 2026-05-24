@@ -34,23 +34,21 @@ import { useLlama } from '../llm/LlamaContext';
 
 // The three recommended models shown as informational cards.
 // Users can download any compatible GGUF model, not just these.
-const RECOMMENDED_MODELS = [
+export const RECOMMENDED_MODELS = [
   {
     name: 'Gemma 4 E4B (recommended)',
-    description: '~5 GB · Best balance of quality and speed on modern phones',
+    description: '~5 GB · Best quality, requires 8 GB RAM',
     url: 'https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf',
   },
   {
     name: 'Qwen3-4B Q4_K_M',
-    description: '~2.5 GB · Strong reasoning, great for debate and analysis',
-    url: null,
-    hint: 'Search "Qwen3-4B GGUF" on huggingface.co',
+    description: '~2.5 GB · Strong reasoning, good for debate',
+    url: 'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf',
   },
   {
     name: 'Phi-4 Mini Q4_K_M',
-    description: '~2.1 GB · Compact, fast, good instruction following',
-    url: null,
-    hint: 'Search "phi-4-mini GGUF" on huggingface.co',
+    description: '~2.5 GB · Smallest and fastest',
+    url: 'https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf',
   },
 ];
 
@@ -174,20 +172,16 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
         <View key={m.name} style={styles.modelCard}>
           <Text style={styles.modelName}>{m.name}</Text>
           <Text style={styles.modelDesc}>{m.description}</Text>
-          {m.url ? (
-            <TouchableOpacity
-              style={styles.downloadCardBtn}
-              onPress={() => {
-                setDownloadUrl(m.url!);
-                handleDownloadUrl(m.url!);
-              }}
-              disabled={downloading}
-            >
-              <Text style={styles.downloadCardBtnText}>Download & load</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.modelHint}>{m.hint}</Text>
-          )}
+          <TouchableOpacity
+            style={[styles.downloadCardBtn, downloading && styles.disabledBtn]}
+            onPress={() => {
+              setDownloadUrl(m.url);
+              handleDownloadUrl(m.url);
+            }}
+            disabled={downloading}
+          >
+            <Text style={styles.downloadCardBtnText}>Download & load</Text>
+          </TouchableOpacity>
         </View>
       ))}
 

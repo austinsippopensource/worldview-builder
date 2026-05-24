@@ -25,9 +25,11 @@ import {
 } from 'react-native';
 import { pick, types } from 'react-native-document-picker';
 import RNFS from 'react-native-fs';
+
 import { Platform } from 'react-native';
 import { Settings } from '../storage/settings';
 import { useLlama } from '../llm/LlamaContext';
+import { RECOMMENDED_MODELS } from './ModelSetupScreen';
 import { WorldviewDB } from '../db/worldview';
 import { KnowledgeDB } from '../db/knowledge';
 import { ConversationsDB } from '../db/conversations';
@@ -38,6 +40,8 @@ export function SettingsScreen() {
   const [savedBraveKey, setSavedBraveKey] = useState<string | null>(null);
   const [modelPath, setModelPath] = useState<string | null>(null);
   const [loadingModel, setLoadingModel] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const { loadModel, modelLoaded } = useLlama();
 
   // Load current settings from AsyncStorage on mount
@@ -81,6 +85,41 @@ export function SettingsScreen() {
         Alert.alert('Error', 'Could not load model.');
       }
     } finally {
+      setLoadingModel(false);
+    }
+  }
+
+  async function handleDownloadAndSwitch(url: string) {
+    const fileName = url.split('/').pop() ?? 'model.gguf';
+    const destPath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+    setDownloading(true);
+    setDownloadProgress(0);
+    try {
+      const download = RNFS.downloadFile({
+        fromUrl: url,
+        toFile: destPath,
+        progress: res => {
+          if (res.contentLength > 0) {
+            setDownloadProgress(res.bytesWritten / res.contentLength);
+          } else {
+            setDownloadProgress(-res.bytesWritten);
+          }
+        },
+      });
+      const result = await download.promise;
+      if (result.statusCode !== 200) {
+        Alert.alert('Download failed', `Status ${result.statusCode}`);
+        return;
+      }
+      setLoadingModel(true);
+      await loadModel(destPath);
+      await Settings.setModelPath(destPath);
+      setModelPath(destPath);
+      Alert.alert('Model switched', `Now using ${fileName}`);
+    } catch (e) {
+      Alert.alert('Failed', 'Download or model load failed. Check your connection.');
+    } finally {
+      setDownloading(false);
       setLoadingModel(false);
     }
   }
@@ -166,6 +205,43 @@ export function SettingsScreen() {
         </TouchableOpacity>
       )}
 
+      {/* ── Switch Model ────────────────────────────────────────────────────── */}
+      <Text style={styles.sectionTitle}>Switch Model</Text>
+      <Text style={styles.description}>
+        Download a different model to switch to it. The new model replaces the active one immediately.
+      </Text>
+      {RECOMMENDED_MODELS.map(m => (
+        <View key={m.name} style={styles.modelCard}>
+          <Text style={styles.modelCardName}>{m.name}</Text>
+          <Text style={styles.modelCardDesc}>{m.description}</Text>
+          {downloading ? (
+            <View style={styles.progressContainer}>
+              {downloadProgress >= 0 ? (
+                <>
+                  <View style={[styles.progressBar, { width: `${Math.round(downloadProgress * 100)}%` }]} />
+                  <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.progressBar, { width: '100%', opacity: 0.3 }]} />
+                  <Text style={styles.progressText}>
+                    {(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…
+                  </Text>
+                </>
+              )}
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.btn, styles.switchBtn]}
+              onPress={() => handleDownloadAndSwitch(m.url)}
+              disabled={loadingModel}
+            >
+              <Text style={styles.btnText}>Download & switch</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ))}
+
       {/* ── Data ────────────────────────────────────────────────────────────── */}
       <Text style={styles.sectionTitle}>Data</Text>
       <TouchableOpacity style={[styles.btn, styles.dangerBtn]} onPress={handleClearAllData}>
@@ -233,4 +309,31 @@ const styles = StyleSheet.create({
   },
   modelStatus: { fontSize: 14, fontWeight: '600', color: '#1a1a2e' },
   modelName: { fontSize: 12, color: '#666' },
+  modelCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  modelCardName: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', marginBottom: 2 },
+  modelCardDesc: { fontSize: 13, color: '#555', marginBottom: 10 },
+  switchBtn: { alignSelf: 'flex-start' },
+  progressContainer: {
+    height: 36,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 8,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#1a1a2e',
+  },
+  progressText: { color: '#fff', fontWeight: '700', fontSize: 13, zIndex: 1 },
 });
