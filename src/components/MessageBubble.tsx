@@ -21,6 +21,8 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import type { Message } from '../types';
 
@@ -73,29 +75,31 @@ export function MessageBubble({ message, onSavePassage }: Props) {
 
       {/* Bottom sheet modal for save / rephrase */}
       <Modal visible={showModal} transparent animationType="slide">
-        {/* Tapping the dark overlay closes the sheet */}
-        <Pressable style={styles.overlay} onPress={() => setShowModal(false)}>
-          {/* stopPropagation prevents the sheet itself from closing when tapped inside */}
-          <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-            <Text style={styles.sheetTitle}>Save to Worldview</Text>
-            <TextInput
-              style={styles.input}
-              multiline
-              value={rephrased}
-              onChangeText={setRephrased}
-              placeholder="Rephrase in your own words..."
-              placeholderTextColor="#999"
-            />
-            <View style={styles.actions}>
-              <TouchableOpacity style={styles.btn} onPress={handleSaveOriginal}>
-                <Text style={styles.btnText}>Save as-is</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={handleSaveRephrased}>
-                <Text style={[styles.btnText, styles.btnPrimaryText]}>Save rephrased</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
+        <View style={styles.overlay}>
+          {/* Tapping the dark area behind the sheet closes it */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowModal(false)} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
+              <Text style={styles.sheetTitle}>Save to Worldview</Text>
+              <TextInput
+                style={styles.input}
+                multiline
+                value={rephrased}
+                onChangeText={setRephrased}
+                placeholder="Rephrase in your own words..."
+                placeholderTextColor="#999"
+              />
+              <View style={styles.actions}>
+                <TouchableOpacity style={styles.btn} onPress={handleSaveOriginal}>
+                  <Text style={styles.btnText}>Save as-is</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={handleSaveRephrased}>
+                  <Text style={[styles.btnText, styles.btnPrimaryText]}>Save rephrased</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </>
   );
@@ -137,6 +141,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
+    position: 'relative',
   },
   sheet: {
     backgroundColor: '#fff',

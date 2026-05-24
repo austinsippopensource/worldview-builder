@@ -56,9 +56,9 @@ describe('distillerSystemPrompt', () => {
     expect(prompt).toContain('upsert');
   });
 
-  test('instructs the model to be Socratic (ask one question at a time)', () => {
+  test('instructs the model to pivot after repeated exchanges', () => {
     const prompt = distillerSystemPrompt(themes, false);
-    expect(prompt.toLowerCase()).toContain('socratic');
+    expect(prompt.toLowerCase()).toContain('pivot');
   });
 });
 
