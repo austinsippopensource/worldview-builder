@@ -51,9 +51,9 @@ export const RECOMMENDED_MODELS = [
     url: 'https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf',
   },
   {
-    name: 'Qwen3-1.7B Q4_K_M',
-    description: '~1.1 GB · For low-RAM devices (4 GB RAM phones)',
-    url: 'https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf',
+    name: 'Qwen3-1.7B Q8_0',
+    description: '~1.8 GB · For low-RAM devices (4 GB RAM phones)',
+    url: 'https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf',
   },
 ];
 
