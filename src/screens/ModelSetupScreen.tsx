@@ -201,22 +201,15 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
         autoCorrect={false}
       />
       {downloading ? (
-        <View style={styles.progressContainer}>
-          {downloadProgress >= 0 ? (
-            // Known file size — show percentage
-            <>
-              <View style={[styles.progressBar, { width: `${Math.round(downloadProgress * 100)}%` }]} />
-              <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
-            </>
-          ) : (
-            // No Content-Length — show MB received instead
-            <>
-              <View style={[styles.progressBar, { width: '100%', opacity: 0.3 }]} />
-              <Text style={styles.progressText}>
-                {(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…
-              </Text>
-            </>
-          )}
+        <View style={styles.downloadingRow}>
+          <ActivityIndicator color="#1a1a2e" />
+          <Text style={styles.downloadingText}>
+            {downloadProgress < 0
+              ? `${(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…`
+              : downloadProgress > 0
+              ? `${Math.round(downloadProgress * 100)}%`
+              : 'Downloading… (this may take a few minutes)'}
+          </Text>
         </View>
       ) : (
         <TouchableOpacity
@@ -301,20 +294,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginBottom: 10,
   },
-  progressContainer: {
-    height: 44,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 12,
-    overflow: 'hidden',
-    justifyContent: 'center',
+  downloadingRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
   },
-  progressBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: '#1a1a2e',
-  },
-  progressText: { color: '#fff', fontWeight: '700', fontSize: 15, zIndex: 1 },
+  downloadingText: { fontSize: 14, color: '#1a1a2e', fontWeight: '500', flex: 1 },
 });

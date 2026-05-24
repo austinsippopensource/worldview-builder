@@ -21,6 +21,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  Share,
 } from 'react-native';
 import { WorldviewDB } from '../db/worldview';
 import { ThemeCard } from '../components/ThemeCard';
@@ -48,6 +49,16 @@ export function ThemesScreen() {
   function handleDelete(id: string) {
     WorldviewDB.deleteTheme(id);
     reload();
+  }
+
+  function handleExport() {
+    if (themes.length === 0) return;
+    const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const body = themes
+      .map(t => `${t.theme.toUpperCase()}\n\n${t.content}`)
+      .join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n');
+    const text = `MY WORLDVIEW\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${body}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${date}`;
+    Share.share({ message: text, title: 'My Worldview' });
   }
 
   function handleClearAll() {
@@ -94,9 +105,14 @@ export function ThemesScreen() {
           ListHeaderComponent={
             <View style={styles.listHeader}>
               <Text style={styles.count}>{themes.length} theme{themes.length !== 1 ? 's' : ''}</Text>
-              <TouchableOpacity onPress={handleClearAll}>
-                <Text style={styles.clearAll}>Clear all</Text>
-              </TouchableOpacity>
+              <View style={styles.listActions}>
+                <TouchableOpacity onPress={handleExport}>
+                  <Text style={styles.exportBtn}>Export</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleClearAll}>
+                  <Text style={styles.clearAll}>Clear all</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           }
         />
@@ -125,5 +141,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   count: { fontSize: 14, color: '#666', fontWeight: '500' },
+  listActions: { flexDirection: 'row', gap: 16, alignItems: 'center' },
+  exportBtn: { fontSize: 14, color: '#1a1a2e', fontWeight: '600' },
   clearAll: { fontSize: 14, color: '#cc2200' },
 });
