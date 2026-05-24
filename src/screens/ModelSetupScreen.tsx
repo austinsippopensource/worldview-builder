@@ -47,8 +47,13 @@ export const RECOMMENDED_MODELS = [
   },
   {
     name: 'Phi-4 Mini Q4_K_M',
-    description: '~2.5 GB · Smallest and fastest',
+    description: '~2.5 GB · Fast and capable, requires 6 GB RAM',
     url: 'https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf',
+  },
+  {
+    name: 'Qwen3-1.7B Q4_K_M',
+    description: '~1.1 GB · For low-RAM devices (4 GB RAM phones)',
+    url: 'https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf',
   },
 ];
 

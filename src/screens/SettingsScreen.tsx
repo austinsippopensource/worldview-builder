@@ -39,19 +39,34 @@ export function SettingsScreen() {
   const [braveKey, setBraveKey] = useState('');
   const [savedBraveKey, setSavedBraveKey] = useState<string | null>(null);
   const [modelPath, setModelPath] = useState<string | null>(null);
-  const [loadingModel, setLoadingModel] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [downloadedModels, setDownloadedModels] = useState<Set<string>>(new Set());
+  const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [switchingUrl, setSwitchingUrl] = useState<string | null>(null);
+  const [customUrl, setCustomUrl] = useState('');
+  const [loadingCustom, setLoadingCustom] = useState(false);
   const { loadModel, modelLoaded } = useLlama();
 
-  // Load current settings from AsyncStorage on mount
+  // Load current settings and check which recommended models are already on disk
   useEffect(() => {
     Settings.getBraveApiKey().then(k => {
       setSavedBraveKey(k);
       if (k) setBraveKey(k);
     });
     Settings.getModelPath().then(setModelPath);
+    checkDownloadedModels();
   }, []);
+
+  async function checkDownloadedModels() {
+    const found = new Set<string>();
+    for (const m of RECOMMENDED_MODELS) {
+      const fileName = m.url.split('/').pop() ?? '';
+      const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+      const exists = await RNFS.exists(filePath);
+      if (exists) found.add(m.url);
+    }
+    setDownloadedModels(found);
+  }
 
   async function saveBraveKey() {
     const trimmed = braveKey.trim();
@@ -60,22 +75,21 @@ export function SettingsScreen() {
     Alert.alert('Saved', trimmed ? 'Brave API key saved.' : 'Brave API key cleared.');
   }
 
-  async function handleChangeModel() {
+  async function handlePickFile() {
     try {
       const result = await pick({ type: [types.allFiles] });
       const file = result[0];
       if (!file?.uri) return;
 
-      // Same Android content:// URI handling as ModelSetupScreen
       let path = file.uri;
       if (Platform.OS === 'android' && file.uri.startsWith('content://')) {
         const dest = `${RNFS.DocumentDirectoryPath}/${file.name ?? 'model.gguf'}`;
-        setLoadingModel(true);
+        setSwitchingUrl('__pick__');
         await RNFS.copyFile(file.uri, dest);
         path = dest;
       }
 
-      setLoadingModel(true);
+      setSwitchingUrl('__pick__');
       await loadModel(path);
       await Settings.setModelPath(path);
       setModelPath(path);
@@ -85,14 +99,29 @@ export function SettingsScreen() {
         Alert.alert('Error', 'Could not load model.');
       }
     } finally {
-      setLoadingModel(false);
+      setSwitchingUrl(null);
+    }
+  }
+
+  async function handleSwitchToDownloaded(url: string) {
+    const fileName = url.split('/').pop() ?? 'model.gguf';
+    const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+    setSwitchingUrl(url);
+    try {
+      await loadModel(filePath);
+      await Settings.setModelPath(filePath);
+      setModelPath(filePath);
+    } catch (e) {
+      Alert.alert('Error', 'Could not load model.');
+    } finally {
+      setSwitchingUrl(null);
     }
   }
 
   async function handleDownloadAndSwitch(url: string) {
     const fileName = url.split('/').pop() ?? 'model.gguf';
     const destPath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
-    setDownloading(true);
+    setDownloadingUrl(url);
     setDownloadProgress(0);
     try {
       const download = RNFS.downloadFile({
@@ -111,16 +140,52 @@ export function SettingsScreen() {
         Alert.alert('Download failed', `Status ${result.statusCode}`);
         return;
       }
-      setLoadingModel(true);
+      setDownloadedModels(prev => new Set([...prev, url]));
+      setSwitchingUrl(url);
       await loadModel(destPath);
       await Settings.setModelPath(destPath);
       setModelPath(destPath);
-      Alert.alert('Model switched', `Now using ${fileName}`);
     } catch (e) {
       Alert.alert('Failed', 'Download or model load failed. Check your connection.');
     } finally {
-      setDownloading(false);
-      setLoadingModel(false);
+      setDownloadingUrl(null);
+      setSwitchingUrl(null);
+    }
+  }
+
+  async function handleDownloadCustomUrl() {
+    if (!customUrl.trim()) return;
+    const url = customUrl.trim();
+    const fileName = url.split('/').pop() ?? 'model.gguf';
+    const destPath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+    setLoadingCustom(true);
+    setDownloadProgress(0);
+    try {
+      const download = RNFS.downloadFile({
+        fromUrl: url,
+        toFile: destPath,
+        progress: res => {
+          if (res.contentLength > 0) {
+            setDownloadProgress(res.bytesWritten / res.contentLength);
+          } else {
+            setDownloadProgress(-res.bytesWritten);
+          }
+        },
+      });
+      const result = await download.promise;
+      if (result.statusCode !== 200) {
+        Alert.alert('Download failed', `Status ${result.statusCode}`);
+        return;
+      }
+      await loadModel(destPath);
+      await Settings.setModelPath(destPath);
+      setModelPath(destPath);
+      setCustomUrl('');
+      Alert.alert('Model loaded', `Now using ${fileName}`);
+    } catch (e) {
+      Alert.alert('Failed', 'Download or model load failed. Check the URL and your connection.');
+    } finally {
+      setLoadingCustom(false);
     }
   }
 
@@ -151,8 +216,8 @@ export function SettingsScreen() {
     );
   }
 
-  // Extract just the filename from the full path for display
   const modelName = modelPath ? modelPath.split('/').pop() : null;
+  const isBusy = !!downloadingUrl || !!switchingUrl || loadingCustom;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -169,13 +234,12 @@ export function SettingsScreen() {
         placeholderTextColor="#aaa"
         autoCapitalize="none"
         autoCorrect={false}
-        secureTextEntry  // hides the key from casual observers
+        secureTextEntry
       />
       <View style={styles.row}>
         <TouchableOpacity style={styles.btn} onPress={saveBraveKey}>
           <Text style={styles.btnText}>Save key</Text>
         </TouchableOpacity>
-        {/* Status badge shows at a glance whether search is configured */}
         {savedBraveKey ? (
           <View style={styles.statusBadge}>
             <Text style={styles.statusText}>✓ Active</Text>
@@ -197,45 +261,99 @@ export function SettingsScreen() {
           <Text style={styles.modelName} numberOfLines={2}>{modelName}</Text>
         )}
       </View>
-      {loadingModel ? (
-        <ActivityIndicator style={{ marginTop: 12 }} color="#1a1a2e" />
+
+      {/* Recommended models — smart button per state */}
+      {RECOMMENDED_MODELS.map(m => {
+        const fileName = m.url.split('/').pop() ?? '';
+        const isActive = !!modelPath && modelPath.endsWith(fileName);
+        const isDownloaded = downloadedModels.has(m.url);
+        const isThisDownloading = downloadingUrl === m.url;
+        const isThisSwitching = switchingUrl === m.url;
+
+        return (
+          <View key={m.url} style={[styles.modelCard, isActive && styles.modelCardActive]}>
+            <View style={styles.modelCardHeader}>
+              <Text style={styles.modelCardName}>{m.name}</Text>
+              {isActive && <Text style={styles.activeBadge}>Active</Text>}
+              {!isActive && isDownloaded && <Text style={styles.downloadedBadge}>On device</Text>}
+            </View>
+            <Text style={styles.modelCardDesc}>{m.description}</Text>
+            {isThisDownloading ? (
+              <View style={styles.busyRow}>
+                <ActivityIndicator color="#1a1a2e" />
+                <Text style={styles.busyText}>
+                  {downloadProgress < 0
+                    ? `${(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…`
+                    : downloadProgress > 0
+                    ? `${Math.round(downloadProgress * 100)}%`
+                    : 'Downloading…'}
+                </Text>
+              </View>
+            ) : isThisSwitching ? (
+              <View style={styles.busyRow}>
+                <ActivityIndicator color="#1a1a2e" />
+                <Text style={styles.busyText}>Loading model…</Text>
+              </View>
+            ) : isActive ? null : isDownloaded ? (
+              <TouchableOpacity
+                style={[styles.btn, styles.switchBtn]}
+                onPress={() => handleSwitchToDownloaded(m.url)}
+                disabled={isBusy}
+              >
+                <Text style={styles.btnText}>Switch to this model</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.btn, styles.switchBtn, isBusy && styles.disabledBtn]}
+                onPress={() => handleDownloadAndSwitch(m.url)}
+                disabled={isBusy}
+              >
+                <Text style={styles.btnText}>Download & switch</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+
+      {/* Custom model — file picker or URL */}
+      <Text style={styles.subSectionTitle}>Load a custom model</Text>
+      <TouchableOpacity
+        style={[styles.btn, isBusy && styles.disabledBtn]}
+        onPress={handlePickFile}
+        disabled={isBusy}
+      >
+        <Text style={styles.btnText}>Browse for .gguf file</Text>
+      </TouchableOpacity>
+      <Text style={styles.orDivider}>— or download from URL —</Text>
+      <TextInput
+        style={styles.input}
+        value={customUrl}
+        onChangeText={setCustomUrl}
+        placeholder="https://huggingface.co/…/model.gguf"
+        placeholderTextColor="#aaa"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      {loadingCustom ? (
+        <View style={styles.busyRow}>
+          <ActivityIndicator color="#1a1a2e" />
+          <Text style={styles.busyText}>
+            {downloadProgress < 0
+              ? `${(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…`
+              : downloadProgress > 0
+              ? `${Math.round(downloadProgress * 100)}%`
+              : 'Downloading…'}
+          </Text>
+        </View>
       ) : (
-        <TouchableOpacity style={styles.btn} onPress={handleChangeModel}>
-          <Text style={styles.btnText}>{modelLoaded ? 'Change model' : 'Load model'}</Text>
+        <TouchableOpacity
+          style={[styles.btn, (!customUrl.trim() || isBusy) && styles.disabledBtn]}
+          onPress={handleDownloadCustomUrl}
+          disabled={!customUrl.trim() || isBusy}
+        >
+          <Text style={styles.btnText}>Download & load</Text>
         </TouchableOpacity>
       )}
-
-      {/* ── Switch Model ────────────────────────────────────────────────────── */}
-      <Text style={styles.sectionTitle}>Switch Model</Text>
-      <Text style={styles.description}>
-        Download a different model to switch to it. The new model replaces the active one immediately.
-      </Text>
-      {RECOMMENDED_MODELS.map(m => (
-        <View key={m.name} style={styles.modelCard}>
-          <Text style={styles.modelCardName}>{m.name}</Text>
-          <Text style={styles.modelCardDesc}>{m.description}</Text>
-          {downloading ? (
-            <View style={styles.downloadingRow}>
-              <ActivityIndicator color="#1a1a2e" />
-              <Text style={styles.downloadingText}>
-                {downloadProgress < 0
-                  ? `${(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…`
-                  : downloadProgress > 0
-                  ? `${Math.round(downloadProgress * 100)}%`
-                  : 'Downloading… (this may take a few minutes)'}
-              </Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.btn, styles.switchBtn]}
-              onPress={() => handleDownloadAndSwitch(m.url)}
-              disabled={loadingModel}
-            >
-              <Text style={styles.btnText}>Download & switch</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ))}
 
       {/* ── Data ────────────────────────────────────────────────────────────── */}
       <Text style={styles.sectionTitle}>Data</Text>
@@ -312,14 +430,56 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  modelCardName: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', marginBottom: 2 },
+  modelCardActive: {
+    borderColor: '#2a7a2a',
+    backgroundColor: '#f4fbf4',
+  },
+  modelCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  modelCardName: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', flex: 1 },
   modelCardDesc: { fontSize: 13, color: '#555', marginBottom: 10 },
+  activeBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2a7a2a',
+    backgroundColor: '#d4f0d4',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  downloadedBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#555',
+    backgroundColor: '#ebebeb',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
   switchBtn: { alignSelf: 'flex-start' },
-  downloadingRow: {
+  disabledBtn: { opacity: 0.4 },
+  busyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingVertical: 8,
   },
-  downloadingText: { fontSize: 13, color: '#1a1a2e', fontWeight: '500', flex: 1 },
+  busyText: { fontSize: 13, color: '#1a1a2e', fontWeight: '500', flex: 1 },
+  subSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  orDivider: {
+    fontSize: 12,
+    color: '#aaa',
+    textAlign: 'center',
+    marginVertical: 10,
+  },
 });
