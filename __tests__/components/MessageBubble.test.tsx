@@ -44,21 +44,21 @@ describe('MessageBubble — rendering', () => {
     );
   });
 
-  test('shows "Hold to save passage" hint on AI messages when onSavePassage is provided', () => {
+  test('shows "Hold to save" hint on AI messages when onSavePassage is provided', () => {
     expect(
       rendered(<MessageBubble message={aiMessage} onSavePassage={() => {}} />),
-    ).toContain('Hold to save passage');
+    ).toContain('Hold to save');
   });
 
-  test('does NOT show hint on user messages even when onSavePassage is provided', () => {
+  test('shows "Hold to save" hint on user messages when onSavePassage is provided', () => {
     expect(
       rendered(<MessageBubble message={userMessage} onSavePassage={() => {}} />),
-    ).not.toContain('Hold to save passage');
+    ).toContain('Hold to save');
   });
 
   test('does NOT show hint when onSavePassage is not provided', () => {
     expect(rendered(<MessageBubble message={aiMessage} />)).not.toContain(
-      'Hold to save passage',
+      'Hold to save',
     );
   });
 });

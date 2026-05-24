@@ -30,14 +30,35 @@ import { ChallengerScreen } from '../screens/ChallengerScreen';
 import { ThemesScreen } from '../screens/ThemesScreen';
 import { KnowledgeScreen } from '../screens/KnowledgeScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { PositionsScreen } from '../screens/PositionsScreen';
+import { PositionChatScreen } from '../screens/PositionChatScreen';
 
 const Tab = createBottomTabNavigator();
 const LibraryStack = createNativeStackNavigator();
+const PositionsStack = createNativeStackNavigator();
 const RootStack = createNativeStackNavigator();
 
 /** Renders an emoji as a tab bar icon, dimmed when the tab is inactive. */
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
   return <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>{label}</Text>;
+}
+
+/** Positions list → individual position chat. */
+function PositionsNavigator() {
+  return (
+    <PositionsStack.Navigator>
+      <PositionsStack.Screen
+        name="PositionsList"
+        component={PositionsScreen}
+        options={{ title: 'Positions' }}
+      />
+      <PositionsStack.Screen
+        name="PositionChat"
+        component={PositionChatScreen}
+        options={({ route }: any) => ({ title: route.params?.topic ?? 'Position' })}
+      />
+    </PositionsStack.Navigator>
+  );
 }
 
 /** The Themes → Knowledge nested navigator for the Library tab. */
@@ -92,6 +113,15 @@ function MainTabs({ navigation }: { navigation: any }) {
           title: 'Distill',
           headerTitle: 'Build Worldview',
           tabBarIcon: ({ focused }) => <TabIcon label="💡" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Positions"
+        component={PositionsNavigator}
+        options={{
+          title: 'Positions',
+          headerShown: false,
+          tabBarIcon: ({ focused }) => <TabIcon label="🎯" focused={focused} />,
         }}
       />
       <Tab.Screen

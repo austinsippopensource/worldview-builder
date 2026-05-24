@@ -19,7 +19,7 @@
  * buffer is cleared and the final message replaces it.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useLlama } from './LlamaContext';
 import { braveSearch, formatResultsForPrompt } from '../search/brave';
 import { Settings } from '../storage/settings';
@@ -35,23 +35,82 @@ interface UseAgenticChatOptions {
   mode: AIMode;
   themes: WorldviewTheme[];
   systemPromptFn: SystemPromptFn;
-  onThemeDetected?: (theme: string, content: string) => void;  // fired when distiller emits a <theme> block
+  onThemeDetected?: (theme: string, content: string) => void;
+  onPositionDetected?: (topic: string, statement: string) => void;
   onSaveToKnowledge?: (content: string) => void;
+  autoStart?: boolean; // fires one AI-initiated opening message on mount
 }
 
 export function useAgenticChat({
   themes,
   systemPromptFn,
   onThemeDetected,
+  onPositionDetected,
+  autoStart,
 }: UseAgenticChatOptions) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [streamBuffer, setStreamBuffer] = useState('');  // tokens accumulate here during generation
+  const [streamBuffer, setStreamBuffer] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const { complete, isGenerating, modelLoaded } = useLlama();
-
-  // Ref (not state) so that the abort check inside the async loop always reads
-  // the latest value without needing it in any dependency array
   const abortRef = useRef(false);
+  const hasAutoStarted = useRef(false);
+
+  // Parses <theme> and <position> tags from a completed response and fires callbacks.
+  const handleStructuredTags = useCallback((response: string) => {
+    const themeMatch = response.match(/<theme>([\s\S]*?)<\/theme>/);
+    if (themeMatch && onThemeDetected) {
+      try {
+        const parsed = JSON.parse(themeMatch[1].trim());
+        if (parsed.action === 'upsert' && parsed.theme && parsed.content) {
+          onThemeDetected(parsed.theme, parsed.content);
+        }
+      } catch {}
+    }
+    const positionMatch = response.match(/<position>([\s\S]*?)<\/position>/);
+    if (positionMatch && onPositionDetected) {
+      try {
+        const parsed = JSON.parse(positionMatch[1].trim());
+        if (parsed.topic && parsed.statement) {
+          onPositionDetected(parsed.topic, parsed.statement);
+        }
+      } catch {}
+    }
+  }, [onThemeDetected, onPositionDetected]);
+
+  // Fires an AI-initiated opening message on mount, without any user input.
+  // Used by the Positions tab so the AI can propose a starting position.
+  useEffect(() => {
+    if (!autoStart || hasAutoStarted.current || !modelLoaded) return;
+    hasAutoStarted.current = true;
+    (async () => {
+      const braveKey = await Settings.getBraveApiKey();
+      const systemPrompt = systemPromptFn(themes, !!braveKey);
+      let accumulated = '';
+      setStreamBuffer('');
+      let response = '';
+      try {
+        response = await complete(systemPrompt, [], token => {
+          accumulated += token;
+          setStreamBuffer(
+            accumulated
+              .replace(/<search>[\s\S]*?<\/search>/g, '')
+              .replace(/<search>[\s\S]*$/, ''),
+          );
+        });
+      } catch { return; }
+      setStreamBuffer('');
+      const clean = response
+        .replace(/<search>[\s\S]*?<\/search>/g, '')
+        .replace(/<theme>[\s\S]*?<\/theme>/g, '')
+        .replace(/<position>[\s\S]*?<\/position>/g, '')
+        .trim();
+      if (clean) {
+        setMessages([{ id: uuid(), role: 'assistant', content: clean, timestamp: Date.now() }]);
+      }
+      handleStructuredTags(response);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, modelLoaded]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -100,8 +159,10 @@ export function useAgenticChat({
             // While streaming, hide any in-progress <search> tag from the display
             // (it would look jarring to show the raw tag appearing character by character)
             const displayText = accumulated
-              .replace(/<search>[\s\S]*?<\/search>/g, '')   // completed search tags
-              .replace(/<search>[\s\S]*$/, '');              // partial/incomplete tag
+              .replace(/<search>[\s\S]*?<\/search>/g, '')
+              .replace(/<position>[\s\S]*?<\/position>/g, '')
+              .replace(/<search>[\s\S]*$/, '')
+              .replace(/<position>[\s\S]*$/, '');
             setStreamBuffer(displayText);
           });
         } catch {
@@ -174,10 +235,10 @@ export function useAgenticChat({
 
       // ── Commit the final response to state ────────────────────────────────
       if (!abortRef.current && finalResponse) {
-        // Strip all structured tags before displaying — the user never sees raw XML
         const cleanResponse = finalResponse
           .replace(/<search>[\s\S]*?<\/search>/g, '')
           .replace(/<theme>[\s\S]*?<\/theme>/g, '')
+          .replace(/<position>[\s\S]*?<\/position>/g, '')
           .trim();
 
         if (cleanResponse) {
@@ -190,19 +251,7 @@ export function useAgenticChat({
           setMessages(prev => [...prev, assistantMsg]);
         }
 
-        // ── Parse and fire theme upserts (distiller only) ──────────────────
-        // The distiller embeds <theme>{"action":"upsert","theme":"...","content":"..."}</theme>
-        // in its responses. We parse it here and notify the calling screen so it
-        // can persist the theme to SQLite.
-        const themeMatch = finalResponse.match(/<theme>([\s\S]*?)<\/theme>/);
-        if (themeMatch && onThemeDetected) {
-          try {
-            const parsed = JSON.parse(themeMatch[1].trim());
-            if (parsed.action === 'upsert' && parsed.theme && parsed.content) {
-              onThemeDetected(parsed.theme, parsed.content);
-            }
-          } catch {} // silently ignore malformed JSON from the LLM
-        }
+        handleStructuredTags(finalResponse);
       }
     },
     [messages, themes, systemPromptFn, complete, isGenerating, onThemeDetected],

@@ -72,6 +72,18 @@ export function initDB() {
   // Saved quotes, passages, and arguments from the AI or web search results.
   // Each entry is tagged with a stance (supporting/challenging) and can be
   // linked to specific worldview themes via a JSON array of theme IDs.
+  // Saved positions on concrete policy topics from the Positions tab.
+  // topic is UNIQUE — each topic can only have one articulated position.
+  database.execute(`
+    CREATE TABLE IF NOT EXISTS positions (
+      id TEXT PRIMARY KEY,
+      topic TEXT NOT NULL UNIQUE,
+      category TEXT NOT NULL,
+      statement TEXT,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
   database.execute(`
     CREATE TABLE IF NOT EXISTS knowledge_entries (
       id TEXT PRIMARY KEY,

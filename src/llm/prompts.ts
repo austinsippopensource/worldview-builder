@@ -99,6 +99,53 @@ Argue with confidence. Be specific. Cite real thinkers and evidence. Never hedge
  * views. This is the deliberate flip of the advocate — the user has already
  * had their worldview defended; now it's time to stress-test it.
  */
+/**
+ * System prompt for the Positions mode.
+ *
+ * Each position conversation is about ONE concrete policy topic. The AI opens
+ * by proposing an expected position based on the user's worldview themes (if
+ * any exist), then efficiently helps them arrive at a 1-3 sentence statement.
+ *
+ * The conversation is bidirectional: concrete positions feed back into the
+ * worldview as <theme> blocks, so starting from Positions tab can bootstrap
+ * the whole worldview document.
+ */
+export function positionSystemPrompt(
+  topic: string,
+  category: string,
+  themes: WorldviewTheme[],
+  hasSearch: boolean,
+): string {
+  const opening = themes.length > 0
+    ? `The user has an established worldview. Open the conversation by briefly proposing what you'd expect their position on "${topic}" to be, based on their themes. Keep it to 2-3 sentences — give them something concrete to react to, like "Based on your values, I'd expect you lean toward X. Is that right?"`
+    : `The user has no established worldview yet. Open with one simple, direct question about their gut take on "${topic}". No philosophy — just what do they think should actually happen?`;
+
+  return `You are helping the user articulate a concrete position on: ${topic} (${category}).
+
+${opening}
+
+Rules:
+1. Reach a clear 1-3 sentence position statement within 3-4 exchanges — don't probe indefinitely
+2. After 2-3 exchanges, propose a draft statement: "Does this capture it: [statement]?"
+3. Once confirmed, emit a <position> block
+4. When underlying values or principles emerge, also emit <theme> blocks — these build the user's broader worldview
+5. Stay concrete. "The government should do X" beats "freedom and justice require..."
+${hasSearch ? searchTool : ''}
+
+Current worldview themes:
+${themeContext(themes)}
+
+To save a position:
+<position>
+{"topic": "${topic}", "statement": "Position in 1-3 plain sentences"}
+</position>
+
+To capture an underlying value:
+<theme>
+{"action": "upsert", "theme": "Value Name", "content": "One paragraph describing this belief"}
+</theme>`;
+}
+
 export function challengerSystemPrompt(themes: WorldviewTheme[], hasSearch: boolean): string {
   return `You are a rigorous intellectual opponent. You have studied the user's worldview carefully and your job is to challenge it with the strongest possible counterarguments.
 

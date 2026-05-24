@@ -38,9 +38,9 @@ export function MessageBubble({ message, onSavePassage }: Props) {
 
   const isUser = message.role === 'user';
 
-  /** Opens the rephrase modal, pre-populated with the AI's original text. */
+  /** Opens the rephrase modal, pre-populated with the message text. */
   function handleLongPress() {
-    if (isUser || !onSavePassage) return;  // only AI messages can be saved
+    if (!onSavePassage) return;
     setRephrased(message.content);
     setShowModal(true);
   }
@@ -67,9 +67,8 @@ export function MessageBubble({ message, onSavePassage }: Props) {
         <Text style={[styles.text, isUser ? styles.userText : styles.aiText]}>
           {message.content}
         </Text>
-        {/* Hint is shown only on AI messages when saving is possible */}
-        {!isUser && onSavePassage && (
-          <Text style={styles.hint}>Hold to save passage</Text>
+        {onSavePassage && (
+          <Text style={styles.hint}>Hold to save</Text>
         )}
       </TouchableOpacity>
 

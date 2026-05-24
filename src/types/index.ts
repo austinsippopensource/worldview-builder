@@ -8,7 +8,7 @@
 
 // Which of the three AI personas is active in a conversation.
 // "distiller" builds the worldview, "advocate" defends it, "challenger" attacks it.
-export type AIMode = 'distiller' | 'advocate' | 'challenger';
+export type AIMode = 'distiller' | 'advocate' | 'challenger' | 'position';
 
 // Who said a particular message in a chat thread.
 // "search_results" is a synthetic role for messages that hold web search output —
@@ -65,6 +65,17 @@ export interface Conversation {
   mode: AIMode;
   messages: Message[];
   createdAt: number;
+  updatedAt: number;
+}
+
+// A saved stance on a concrete policy topic.
+// The positions tab lets users articulate where they stand on real issues,
+// which also feeds back into the broader worldview themes.
+export interface Position {
+  id: string;
+  topic: string;    // e.g. "Taxation & Government Spending"
+  category: string; // e.g. "Economic Policy"
+  statement: string | null; // null until the user has articulated a position
   updatedAt: number;
 }
 
