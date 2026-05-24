@@ -107,9 +107,11 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
         fromUrl: url,
         toFile: destPath,
         progress: res => {
-          // contentLength is 0 if the server doesn't send Content-Length
           if (res.contentLength > 0) {
             setDownloadProgress(res.bytesWritten / res.contentLength);
+          } else {
+            // No Content-Length header — show bytes received so user knows it's active
+            setDownloadProgress(-res.bytesWritten);
           }
         },
       });
@@ -205,10 +207,22 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
         autoCorrect={false}
       />
       {downloading ? (
-        // Progress bar shown during download
         <View style={styles.progressContainer}>
-          <View style={[styles.progressBar, { width: `${Math.round(downloadProgress * 100)}%` }]} />
-          <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
+          {downloadProgress >= 0 ? (
+            // Known file size — show percentage
+            <>
+              <View style={[styles.progressBar, { width: `${Math.round(downloadProgress * 100)}%` }]} />
+              <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
+            </>
+          ) : (
+            // No Content-Length — show MB received instead
+            <>
+              <View style={[styles.progressBar, { width: '100%', opacity: 0.3 }]} />
+              <Text style={styles.progressText}>
+                {(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…
+              </Text>
+            </>
+          )}
         </View>
       ) : (
         <TouchableOpacity
