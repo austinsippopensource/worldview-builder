@@ -53,9 +53,10 @@ export function LlamaProvider({ children }: { children: ReactNode }) {
     try {
       const ctx = await initLlama({
         model: modelPath,
-        use_mlock: true,
+        use_mlock: false,
         n_ctx: 4096,
         n_threads: 4,
+        n_gpu_layers: 99,  // offload all layers to Metal GPU on iOS
       });
       setContext(ctx);
     } finally {
