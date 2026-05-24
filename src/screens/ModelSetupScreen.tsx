@@ -1,21 +1,18 @@
 /**
  * Model setup screen — shown on first launch when no model is loaded.
  *
- * The app runs entirely on-device using llama.rn (a React Native binding to
- * llama.cpp). Before the main app can be used, the user needs to load a GGUF
- * model file. This screen guides them through two options:
+ * On mount it scans DocumentDirectoryPath for any previously downloaded
+ * recommended model files so the user can skip re-downloading after a
+ * rebuild. (Rebuilding / re-running the app does NOT delete DocumentDirectory
+ * files — only a full app uninstall does.)
  *
- *   Option 1 — Pick a file already downloaded (via the device file browser)
- *   Option 2 — Download a model from a URL directly to the device
- *
- * After a successful load, onModelLoaded() is called and App.tsx transitions
- * to the main navigation.
- *
- * Android note: file picker returns a content:// URI which can't be passed
- * directly to llama.rn. We copy it to the app's documents directory first.
+ * Options:
+ *   - Recommended card buttons: "Use this model" if already on disk, else "Download & load"
+ *   - Browse for any .gguf file already on the device
+ *   - Download from a custom HuggingFace / direct URL
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,8 +29,6 @@ import { pick, types } from 'react-native-document-picker';
 import { Settings } from '../storage/settings';
 import { useLlama } from '../llm/LlamaContext';
 
-// The three recommended models shown as informational cards.
-// Users can download any compatible GGUF model, not just these.
 export const RECOMMENDED_MODELS = [
   {
     name: 'Gemma 4 E4B (recommended)',
@@ -63,10 +58,26 @@ interface Props {
 
 export function ModelSetupScreen({ onModelLoaded }: Props) {
   const [downloadUrl, setDownloadUrl] = useState('');
-  const [downloading, setDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);  // 0.0 → 1.0
+  const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [downloadedFiles, setDownloadedFiles] = useState<Set<string>>(new Set());
   const { loadModel } = useLlama();
+
+  useEffect(() => {
+    checkDownloadedFiles();
+  }, []);
+
+  async function checkDownloadedFiles() {
+    const found = new Set<string>();
+    for (const m of RECOMMENDED_MODELS) {
+      const fileName = m.url.split('/').pop() ?? '';
+      const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+      const exists = await RNFS.exists(filePath);
+      if (exists) found.add(m.url);
+    }
+    setDownloadedFiles(found);
+  }
 
   async function handlePickFile() {
     try {
@@ -74,8 +85,6 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
       const file = result[0];
       if (!file?.uri) return;
 
-      // Android returns a content:// URI that llama.rn can't open directly.
-      // Copy the file to the app's documents directory to get a real file path.
       let modelPath = file.uri;
       if (Platform.OS === 'android' && file.uri.startsWith('content://')) {
         const destPath = `${RNFS.DocumentDirectoryPath}/${file.name ?? 'model.gguf'}`;
@@ -102,7 +111,7 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
     const fileName = url.split('/').pop() ?? 'model.gguf';
     const destPath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
-    setDownloading(true);
+    setDownloadingUrl(url);
     setDownloadProgress(0);
 
     try {
@@ -113,7 +122,6 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
           if (res.contentLength > 0) {
             setDownloadProgress(res.bytesWritten / res.contentLength);
           } else {
-            // No Content-Length header — show bytes received so user knows it's active
             setDownloadProgress(-res.bytesWritten);
           }
         },
@@ -123,23 +131,17 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
         Alert.alert('Download failed', `Status ${result.statusCode}`);
         return;
       }
+      // Clear downloading state before the slow model-load step
+      setDownloadingUrl(null);
+      setDownloadedFiles(prev => new Set([...prev, url]));
       await loadAndSave(destPath);
     } catch (e) {
       Alert.alert('Download failed', 'Check the URL and your internet connection.');
     } finally {
-      setDownloading(false);
+      setDownloadingUrl(null);
     }
   }
 
-  async function handleDownload() {
-    if (!downloadUrl.trim()) return;
-    await handleDownloadUrl(downloadUrl.trim());
-  }
-
-  /**
-   * Loads the model into the LlamaContext and saves the path to AsyncStorage
-   * so it can be auto-loaded on the next app launch.
-   */
   async function loadAndSave(path: string) {
     setLoading(true);
     try {
@@ -153,8 +155,6 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
     }
   }
 
-  // Show a full-screen loader while the model is being read into RAM
-  // (this can take 30–60 seconds for a 2.5 GB model)
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -165,6 +165,8 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
     );
   }
 
+  const isBusy = !!downloadingUrl;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Set up your AI model</Text>
@@ -173,29 +175,61 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
       </Text>
 
       <Text style={styles.sectionTitle}>Recommended models</Text>
-      {RECOMMENDED_MODELS.map(m => (
-        <View key={m.name} style={styles.modelCard}>
-          <Text style={styles.modelName}>{m.name}</Text>
-          <Text style={styles.modelDesc}>{m.description}</Text>
-          <TouchableOpacity
-            style={[styles.downloadCardBtn, downloading && styles.disabledBtn]}
-            onPress={() => {
-              setDownloadUrl(m.url);
-              handleDownloadUrl(m.url);
-            }}
-            disabled={downloading}
-          >
-            <Text style={styles.downloadCardBtnText}>Download & load</Text>
-          </TouchableOpacity>
-        </View>
-      ))}
+      {RECOMMENDED_MODELS.map(m => {
+        const fileName = m.url.split('/').pop() ?? '';
+        const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+        const isDownloaded = downloadedFiles.has(m.url);
+        const isThisDownloading = downloadingUrl === m.url;
 
-      <Text style={styles.sectionTitle}>Option 1 — Pick a file you already downloaded</Text>
-      <TouchableOpacity style={styles.primaryBtn} onPress={handlePickFile}>
+        return (
+          <View key={m.url} style={[styles.modelCard, isDownloaded && styles.modelCardDownloaded]}>
+            <View style={styles.modelCardHeader}>
+              <Text style={styles.modelName}>{m.name}</Text>
+              {isDownloaded && <Text style={styles.onDeviceBadge}>On device</Text>}
+            </View>
+            <Text style={styles.modelDesc}>{m.description}</Text>
+            {isThisDownloading ? (
+              <View style={styles.downloadingRow}>
+                <ActivityIndicator color="#1a1a2e" />
+                <Text style={styles.downloadingText}>
+                  {downloadProgress < 0
+                    ? `${(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…`
+                    : downloadProgress > 0
+                    ? `${Math.round(downloadProgress * 100)}%`
+                    : 'Downloading…'}
+                </Text>
+              </View>
+            ) : isDownloaded ? (
+              <TouchableOpacity
+                style={[styles.downloadCardBtn, isBusy && styles.disabledBtn]}
+                onPress={() => loadAndSave(filePath)}
+                disabled={isBusy}
+              >
+                <Text style={styles.downloadCardBtnText}>Use this model</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.downloadCardBtn, isBusy && styles.disabledBtn]}
+                onPress={() => handleDownloadUrl(m.url)}
+                disabled={isBusy}
+              >
+                <Text style={styles.downloadCardBtnText}>Download & load</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+
+      <Text style={styles.sectionTitle}>Browse for a file</Text>
+      <TouchableOpacity
+        style={[styles.primaryBtn, isBusy && styles.disabledBtn]}
+        onPress={handlePickFile}
+        disabled={isBusy}
+      >
         <Text style={styles.primaryBtnText}>Browse for .gguf file</Text>
       </TouchableOpacity>
 
-      <Text style={styles.sectionTitle}>Option 2 — Download from URL</Text>
+      <Text style={styles.sectionTitle}>Download from URL</Text>
       <TextInput
         style={styles.urlInput}
         value={downloadUrl}
@@ -205,7 +239,7 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
         autoCapitalize="none"
         autoCorrect={false}
       />
-      {downloading ? (
+      {downloadingUrl !== null && !RECOMMENDED_MODELS.find(m => m.url === downloadingUrl) ? (
         <View style={styles.downloadingRow}>
           <ActivityIndicator color="#1a1a2e" />
           <Text style={styles.downloadingText}>
@@ -213,14 +247,16 @@ export function ModelSetupScreen({ onModelLoaded }: Props) {
               ? `${(Math.abs(downloadProgress) / 1024 / 1024).toFixed(0)} MB received…`
               : downloadProgress > 0
               ? `${Math.round(downloadProgress * 100)}%`
-              : 'Downloading… (this may take a few minutes)'}
+              : 'Downloading…'}
           </Text>
         </View>
       ) : (
         <TouchableOpacity
-          style={[styles.primaryBtn, !downloadUrl.trim() && styles.disabledBtn]}
-          onPress={handleDownload}
-          disabled={!downloadUrl.trim()}
+          style={[styles.primaryBtn, (!downloadUrl.trim() || isBusy) && styles.disabledBtn]}
+          onPress={() => {
+            if (downloadUrl.trim()) handleDownloadUrl(downloadUrl.trim());
+          }}
+          disabled={!downloadUrl.trim() || isBusy}
         >
           <Text style={styles.primaryBtnText}>Download &amp; load</Text>
         </TouchableOpacity>
@@ -270,9 +306,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  modelName: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', marginBottom: 2 },
+  modelCardDownloaded: {
+    borderColor: '#aac8aa',
+    backgroundColor: '#f6fbf6',
+  },
+  modelCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  modelName: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', flex: 1 },
+  onDeviceBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2a7a2a',
+    backgroundColor: '#d4f0d4',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
   modelDesc: { fontSize: 13, color: '#555', marginBottom: 4 },
-  modelHint: { fontSize: 12, color: '#888', fontStyle: 'italic' },
   downloadCardBtn: {
     marginTop: 10,
     backgroundColor: '#1a1a2e',
